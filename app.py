@@ -184,3 +184,73 @@ if st.session_state.edited_image_url:
             label="⬇️ Download Edited Photo",
             data=img_bytes,
             file_name="edited_photo.jpg",
+            mime="image/jpeg",
+            key="download_edit_btn"
+        )
+    except Exception as e:
+        st.warning(f"Could not prepare download: {e}")
+
+# ---------------------------------------------------------------
+# UPLOAD YOUR OWN IMAGE -> VIDEO
+# ---------------------------------------------------------------
+st.write("---")
+st.subheader("📤 Upload Your Own Photo and Make a Video")
+
+uploaded_file = st.file_uploader(
+    "Choose an image (JPG or PNG)",
+    type=["jpg", "jpeg", "png"],
+    key="img_uploader"
+)
+
+if uploaded_file is not None:
+    st.image(uploaded_file, caption="Your uploaded image", width=400)
+
+    motion_prompt = st.text_input(
+        "Describe the motion you want",
+        value="cinematic camera movement, slow motion",
+        key="motion_prompt"
+    )
+
+    if st.button("Animate My Uploaded Image", key="upload_video_btn"):
+        os.environ["FAL_KEY"] = fal_key
+        try:
+            with st.spinner("📤 Preparing and uploading your image..."):
+                uploaded_url = upload_to_fal(uploaded_file)
+
+            with st.spinner("🎥 Creating video (this takes 1-3 minutes)..."):
+                video_handler = fal_client.submit(
+                    "fal-ai/luma-dream-machine/ray-2/image-to-video",
+                    arguments={
+                        "image_url": uploaded_url,
+                        "prompt": motion_prompt,
+                        "duration": "9s"
+                    }
+                )
+                video_result = video_handler.get()
+                vid_url = video_result['video']['url']
+                st.session_state.uploaded_video_url = vid_url
+
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+# Show resulting video + download
+if st.session_state.uploaded_video_url:
+    st.success("Your video is ready!")
+    col1, col2, col3 = st.columns([2, 1, 2])
+    with col2:
+        st.video(st.session_state.uploaded_video_url)
+
+    try:
+        video_bytes = requests.get(st.session_state.uploaded_video_url).content
+        st.download_button(
+            label="⬇️ Download Video",
+            data=video_bytes,
+            file_name="nas_ai_video.mp4",
+            mime="video/mp4",
+            key="download_vid_btn"
+        )
+    except Exception as e:
+        st.warning(f"Could not prepare download: {e}")
+
+st.write("---")
+st.caption("Ask Nas Anything can make mistakes. Please double-check responses.")
