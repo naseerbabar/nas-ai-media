@@ -8,7 +8,7 @@ from PIL import Image
 
 st.set_page_config(page_title="Ask Nas Anything", page_icon="🎨", layout="wide")
 st.title("🎨 Ask Nas Anything")
-st.caption("Chat • Generate images • Edit photos • Make videos")
+st.caption("Chat • Generate images • Edit photos • Make videos (Spicy Mode supported)")
 
 groq_key = st.secrets["groq_key"]
 fal_key = st.secrets["fal_key"]
@@ -31,6 +31,7 @@ def upload_to_fal(uploaded_file, max_size=1920):
     os.remove(temp_path)
     return url
 
+# Session state
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "last_generated_image" not in st.session_state:
@@ -44,8 +45,17 @@ if "edited_image_url" not in st.session_state:
 if "t2v_video_url" not in st.session_state:
     st.session_state.t2v_video_url = None
 
-# Sidebar
+# ---------------------------------------------------------------
+# SIDEBAR
+# ---------------------------------------------------------------
 st.sidebar.markdown("### Options")
+
+spicy_mode = st.sidebar.checkbox(
+    "🌶️ Spicy Mode (Uncensored)",
+    value=True,
+    help="Turns off safety checkers and uses more open models (Wan + Hunyuan)"
+)
+
 if st.sidebar.button("🗑️ Clear Everything"):
     st.session_state.messages = []
     st.session_state.last_generated_image = None
@@ -59,8 +69,14 @@ st.sidebar.info(
     "**Tips**\n\n"
     "• Type `/image a red car` in chat to generate an image\n\n"
     "• Photo editing and video are in the Media tab\n\n"
-    "• Video generation can take several minutes"
+    "• Spicy Mode uses Wan + Hunyuan (much more permissive)\n\n"
+    "• Video generation can take 1-4 minutes"
 )
+
+if spicy_mode:
+    st.sidebar.success("Spicy Mode is ON")
+else:
+    st.sidebar.warning("Spicy Mode is OFF (safer models)")
 
 tab_chat, tab_media = st.tabs(["💬 Chat", "🎨 Media"])
 
@@ -83,22 +99,39 @@ with tab_chat:
 
         gen_motion_prompt = st.text_input(
             "Describe the motion you want",
-            value="cinematic camera movement, slow motion",
+            value="natural body movement, sensual motion, cinematic camera",
             key="gen_motion_prompt"
         )
 
         if st.button("Turn Last Generated Image into Video", key="video_gen_btn"):
             os.environ["FAL_KEY"] = fal_key
-            with st.spinner("🎥 Creating video (this takes 1-3 minutes)..."):
+            with st.spinner("🎥 Creating video (1-3 minutes)..."):
                 try:
-                    video_handler = fal_client.submit(
-                        "fal-ai/luma-dream-machine/ray-2/image-to-video",
-                        arguments={
-                            "image_url": st.session_state.last_generated_image,
-                            "prompt": gen_motion_prompt,
-                            "duration": "9s"
-                        }
-                    )
+                    if spicy_mode:
+                        # Spicy path → Wan
+                        video_handler = fal_client.submit(
+                            "fal-ai/wan-i2v",
+                            arguments={
+                                "image_url": st.session_state.last_generated_image,
+                                "prompt": gen_motion_prompt,
+                                "resolution": "720p",
+                                "num_frames": 81,
+                                "frames_per_second": 16,
+                                "enable_safety_checker": False,
+                                "enable_prompt_expansion": False
+                            }
+                        )
+                    else:
+                        # Safe path → Luma
+                        video_handler = fal_client.submit(
+                            "fal-ai/luma-dream-machine/ray-2/image-to-video",
+                            arguments={
+                                "image_url": st.session_state.last_generated_image,
+                                "prompt": gen_motion_prompt,
+                                "duration": "9s"
+                            }
+                        )
+
                     video_result = video_handler.get()
                     vid_url = video_result['video']['url']
                     st.session_state.messages.append({"role": "assistant", "type": "video", "content": vid_url})
@@ -137,15 +170,20 @@ with tab_media:
                     source_url = upload_to_fal(edit_file)
 
                 with st.spinner("✨ Editing photo..."):
+                    edit_args = {
+                        "prompt": edit_prompt,
+                        "image_urls": [source_url],
+                        "num_images": 1,
+                        "output_format": "jpeg",
+                        "resolution": "1K"
+                    }
+                    # Try to disable safety if the model supports it
+                    if spicy_mode:
+                        edit_args["enable_safety_checker"] = False
+
                     edit_handler = fal_client.submit(
                         "fal-ai/nano-banana-2/edit",
-                        arguments={
-                            "prompt": edit_prompt,
-                            "image_urls": [source_url],
-                            "num_images": 1,
-                            "output_format": "jpeg",
-                            "resolution": "1K"
-                        }
+                        arguments=edit_args
                     )
                     edit_result = edit_handler.get()
                     st.session_state.edited_image_url = edit_result['images'][0]['url']
@@ -181,7 +219,7 @@ with tab_media:
 
         motion_prompt = st.text_input(
             "Describe the motion you want",
-            value="cinematic camera movement, slow motion",
+            value="natural sensual movement, soft body motion, cinematic camera",
             key="motion_prompt"
         )
 
@@ -192,14 +230,29 @@ with tab_media:
                     uploaded_url = upload_to_fal(uploaded_file)
 
                 with st.spinner("🎥 Creating video (this takes 1-3 minutes)..."):
-                    video_handler = fal_client.submit(
-                        "fal-ai/luma-dream-machine/ray-2/image-to-video",
-                        arguments={
-                            "image_url": uploaded_url,
-                            "prompt": motion_prompt,
-                            "duration": "9s"
-                        }
-                    )
+                    if spicy_mode:
+                        video_handler = fal_client.submit(
+                            "fal-ai/wan-i2v",
+                            arguments={
+                                "image_url": uploaded_url,
+                                "prompt": motion_prompt,
+                                "resolution": "720p",
+                                "num_frames": 81,
+                                "frames_per_second": 16,
+                                "enable_safety_checker": False,
+                                "enable_prompt_expansion": False
+                            }
+                        )
+                    else:
+                        video_handler = fal_client.submit(
+                            "fal-ai/luma-dream-machine/ray-2/image-to-video",
+                            arguments={
+                                "image_url": uploaded_url,
+                                "prompt": motion_prompt,
+                                "duration": "9s"
+                            }
+                        )
+
                     video_result = video_handler.get()
                     st.session_state.uploaded_video_url = video_result['video']['url']
             except Exception as e:
@@ -224,39 +277,51 @@ with tab_media:
 
     st.write("---")
     st.subheader("🎬 Create a Video from Text")
-    st.caption("Describe a scene. The model generates video with synchronized audio, including speech.")
+    st.caption("Describe a scene. Spicy Mode uses more open models.")
 
     t2v_prompt = st.text_area(
         "Describe your video",
-        value="A golden retriever puppy playing in a sunny garden, birds chirping in the background",
+        value="A beautiful woman with natural curves moving slowly and sensually",
         key="t2v_prompt",
         height=100
     )
 
     col_a, col_b, col_c = st.columns(3)
     with col_a:
-        t2v_resolution = st.selectbox("Resolution", ["480p", "720p", "1080p"], index=1, key="t2v_res")
+        t2v_resolution = st.selectbox("Resolution", ["480p", "720p"], index=1, key="t2v_res")
     with col_b:
-        t2v_duration = st.selectbox("Duration (seconds)", ["auto", "4", "5", "6", "8", "10"], index=0, key="t2v_dur")
+        t2v_duration = st.selectbox("Duration", ["5s", "8s", "10s"], index=0, key="t2v_dur")
     with col_c:
-        t2v_aspect = st.selectbox("Aspect ratio", ["auto", "16:9", "9:16", "1:1"], index=0, key="t2v_aspect")
-
-    t2v_audio = st.checkbox("Generate audio (speech, effects, ambience)", value=True, key="t2v_audio")
+        t2v_aspect = st.selectbox("Aspect ratio", ["16:9", "9:16", "1:1"], index=0, key="t2v_aspect")
 
     if st.button("Generate Video", key="t2v_btn"):
         os.environ["FAL_KEY"] = fal_key
         with st.spinner("🎬 Creating your video (this can take several minutes)..."):
             try:
-                t2v_handler = fal_client.submit(
-                    "bytedance/seedance-2.0/text-to-video",
-                    arguments={
-                        "prompt": t2v_prompt,
-                        "resolution": t2v_resolution,
-                        "duration": t2v_duration,
-                        "aspect_ratio": t2v_aspect,
-                        "generate_audio": t2v_audio
-                    }
-                )
+                if spicy_mode:
+                    # Spicy path → Hunyuan (open + safety off by default)
+                    t2v_handler = fal_client.submit(
+                        "fal-ai/hunyuan-video",
+                        arguments={
+                            "prompt": t2v_prompt,
+                            "resolution": t2v_resolution,
+                            "aspect_ratio": t2v_aspect,
+                            "enable_safety_checker": False
+                        }
+                    )
+                else:
+                    # Safe path → Seedance
+                    t2v_handler = fal_client.submit(
+                        "bytedance/seedance-2.0/text-to-video",
+                        arguments={
+                            "prompt": t2v_prompt,
+                            "resolution": t2v_resolution,
+                            "duration": t2v_duration.replace("s", ""),
+                            "aspect_ratio": t2v_aspect,
+                            "generate_audio": True
+                        }
+                    )
+
                 t2v_result = t2v_handler.get()
                 st.session_state.t2v_video_url = t2v_result['video']['url']
             except Exception as e:
@@ -280,7 +345,7 @@ with tab_media:
             st.warning(f"Could not prepare download: {e}")
 
 # ---------------------------------------------------------------
-# CHAT INPUT (always pinned to bottom)
+# CHAT INPUT
 # ---------------------------------------------------------------
 if prompt := st.chat_input("Ask me anything, or type /image followed by a description..."):
     st.session_state.messages.append({"role": "user", "type": "text", "content": prompt})
@@ -291,7 +356,14 @@ if prompt := st.chat_input("Ask me anything, or type /image followed by a descri
         image_prompt = prompt[7:]
         with st.spinner("🎨 Generating image..."):
             try:
-                handler = fal_client.submit("fal-ai/flux/schnell", arguments={"prompt": image_prompt})
+                args = {
+                    "prompt": image_prompt,
+                    "num_images": 1
+                }
+                if spicy_mode:
+                    args["enable_safety_checker"] = False
+
+                handler = fal_client.submit("fal-ai/flux/schnell", arguments=args)
                 result = handler.get()
                 img_url = result['images'][0]['url']
                 st.session_state.last_generated_image = img_url
