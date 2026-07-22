@@ -73,11 +73,6 @@ st.sidebar.info(
     "• Video generation can take 1-4 minutes"
 )
 
-if spicy_mode:
-    st.sidebar.success("Spicy Mode is ON")
-else:
-    st.sidebar.warning("Spicy Mode is OFF (safer models)")
-
 tab_chat, tab_media = st.tabs(["💬 Chat", "🎨 Media"])
 
 # ---------------------------------------------------------------
@@ -177,7 +172,6 @@ with tab_media:
                         "output_format": "jpeg",
                         "resolution": "1K"
                     }
-                    # Try to disable safety if the model supports it
                     if spicy_mode:
                         edit_args["enable_safety_checker"] = False
 
@@ -299,7 +293,7 @@ with tab_media:
         with st.spinner("🎬 Creating your video (this can take several minutes)..."):
             try:
                 if spicy_mode:
-                    # Spicy path → Hunyuan (open + safety off by default)
+                    # Spicy path → Hunyuan
                     t2v_handler = fal_client.submit(
                         "fal-ai/hunyuan-video",
                         arguments={
