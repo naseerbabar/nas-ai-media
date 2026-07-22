@@ -8,7 +8,7 @@ from PIL import Image
 
 st.set_page_config(page_title="Ask Nas Anything", page_icon="🎨", layout="wide")
 st.title("🎨 Ask Nas Anything")
-st.caption("Chat • Generate images • Edit photos • Make videos (Spicy Mode supported)")
+st.caption("Chat • Generate images • Edit photos • Make videos")
 
 groq_key = st.secrets["groq_key"]
 fal_key = st.secrets["fal_key"]
@@ -50,10 +50,10 @@ if "t2v_video_url" not in st.session_state:
 # ---------------------------------------------------------------
 st.sidebar.markdown("### Options")
 
-spicy_mode = st.sidebar.checkbox(
-    "🌶️ Spicy Mode (Uncensored)",
+advanced_mode = st.sidebar.checkbox(
+    "Advanced Mode (Higher Freedom)",
     value=True,
-    help="Turns off safety checkers and uses more open models (Wan + Hunyuan)"
+    help="Uses more open models with fewer restrictions"
 )
 
 if st.sidebar.button("🗑️ Clear Everything"):
@@ -69,7 +69,7 @@ st.sidebar.info(
     "**Tips**\n\n"
     "• Type `/image a red car` in chat to generate an image\n\n"
     "• Photo editing and video are in the Media tab\n\n"
-    "• Spicy Mode uses Wan + Hunyuan (much more permissive)\n\n"
+    "• Advanced Mode provides higher creative freedom\n\n"
     "• Video generation can take 1-4 minutes"
 )
 
@@ -94,7 +94,7 @@ with tab_chat:
 
         gen_motion_prompt = st.text_input(
             "Describe the motion you want",
-            value="natural body movement, sensual motion, cinematic camera",
+            value="natural body movement, cinematic camera",
             key="gen_motion_prompt"
         )
 
@@ -102,8 +102,7 @@ with tab_chat:
             os.environ["FAL_KEY"] = fal_key
             with st.spinner("🎥 Creating video (1-3 minutes)..."):
                 try:
-                    if spicy_mode:
-                        # Spicy path → Wan
+                    if advanced_mode:
                         video_handler = fal_client.submit(
                             "fal-ai/wan-i2v",
                             arguments={
@@ -117,7 +116,6 @@ with tab_chat:
                             }
                         )
                     else:
-                        # Safe path → Luma
                         video_handler = fal_client.submit(
                             "fal-ai/luma-dream-machine/ray-2/image-to-video",
                             arguments={
@@ -172,7 +170,7 @@ with tab_media:
                         "output_format": "jpeg",
                         "resolution": "1K"
                     }
-                    if spicy_mode:
+                    if advanced_mode:
                         edit_args["enable_safety_checker"] = False
 
                     edit_handler = fal_client.submit(
@@ -224,7 +222,7 @@ with tab_media:
                     uploaded_url = upload_to_fal(uploaded_file)
 
                 with st.spinner("🎥 Creating video (this takes 1-3 minutes)..."):
-                    if spicy_mode:
+                    if advanced_mode:
                         video_handler = fal_client.submit(
                             "fal-ai/wan-i2v",
                             arguments={
@@ -271,7 +269,7 @@ with tab_media:
 
     st.write("---")
     st.subheader("🎬 Create a Video from Text")
-    st.caption("Describe a scene. Spicy Mode uses more open models.")
+    st.caption("Describe a scene.")
 
     t2v_prompt = st.text_area(
         "Describe your video",
@@ -292,8 +290,7 @@ with tab_media:
         os.environ["FAL_KEY"] = fal_key
         with st.spinner("🎬 Creating your video (this can take several minutes)..."):
             try:
-                if spicy_mode:
-                    # Spicy path → Hunyuan
+                if advanced_mode:
                     t2v_handler = fal_client.submit(
                         "fal-ai/hunyuan-video",
                         arguments={
@@ -304,7 +301,6 @@ with tab_media:
                         }
                     )
                 else:
-                    # Safe path → Seedance
                     t2v_handler = fal_client.submit(
                         "bytedance/seedance-2.0/text-to-video",
                         arguments={
@@ -354,7 +350,7 @@ if prompt := st.chat_input("Ask me anything, or type /image followed by a descri
                     "prompt": image_prompt,
                     "num_images": 1
                 }
-                if spicy_mode:
+                if advanced_mode:
                     args["enable_safety_checker"] = False
 
                 handler = fal_client.submit("fal-ai/flux/schnell", arguments=args)
