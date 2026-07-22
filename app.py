@@ -8,7 +8,7 @@ from PIL import Image
 
 st.set_page_config(page_title="Ask Nas Anything", page_icon="🎨", layout="wide")
 st.title("🎨 Ask Nas Anything")
-st.caption("Chat • Generate images • Turn images into video")
+st.caption("Chat • Generate images • Edit photos • Turn images into video")
 
 groq_key = st.secrets["groq_key"]
 fal_key = st.secrets["fal_key"]
@@ -19,6 +19,18 @@ def clean_response(text):
     text = re.sub(r"<think>.*", "", text, flags=re.DOTALL | re.IGNORECASE)
     return text.strip()
 
+def upload_to_fal(uploaded_file, max_size=1920):
+    """Resize if needed, save temporarily, upload to fal, return the URL."""
+    img = Image.open(uploaded_file)
+    img = img.convert("RGB")
+    if img.width > max_size or img.height > max_size:
+        img.thumbnail((max_size, max_size))
+    temp_path = "temp_upload.jpg"
+    img.save(temp_path, "JPEG", quality=95)
+    url = fal_client.upload_file(temp_path)
+    os.remove(temp_path)
+    return url
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "last_generated_image" not in st.session_state:
@@ -27,6 +39,8 @@ if "last_image_prompt" not in st.session_state:
     st.session_state.last_image_prompt = ""
 if "uploaded_video_url" not in st.session_state:
     st.session_state.uploaded_video_url = None
+if "edited_image_url" not in st.session_state:
+    st.session_state.edited_image_url = None
 
 # Display chat history
 for msg in st.session_state.messages:
@@ -117,75 +131,56 @@ if st.session_state.last_generated_image:
                 st.error(f"Video error: {e}")
 
 # ---------------------------------------------------------------
-# UPLOAD YOUR OWN IMAGE -> VIDEO
+# PHOTO EDITING
 # ---------------------------------------------------------------
 st.write("---")
-st.subheader("📤 Upload Your Own Photo and Make a Video")
+st.subheader("✨ Edit a Photo")
+st.caption("Upload a photo and describe the change you want in plain language.")
 
-uploaded_file = st.file_uploader(
-    "Choose an image (JPG or PNG)",
+edit_file = st.file_uploader(
+    "Choose a photo to edit (JPG or PNG)",
     type=["jpg", "jpeg", "png"],
-    key="img_uploader"
+    key="edit_uploader"
 )
 
-if uploaded_file is not None:
-    st.image(uploaded_file, caption="Your uploaded image", width=400)
+if edit_file is not None:
+    st.image(edit_file, caption="Original photo", width=400)
 
-    motion_prompt = st.text_input(
-        "Describe the motion you want",
-        value="cinematic camera movement, slow motion",
-        key="motion_prompt"
+    edit_prompt = st.text_input(
+        "What change do you want?",
+        value="make this person look 20 years younger",
+        key="edit_prompt"
     )
 
-    if st.button("Animate My Uploaded Image", key="upload_video_btn"):
+    if st.button("Apply Edit", key="edit_btn"):
         os.environ["FAL_KEY"] = fal_key
         try:
-            with st.spinner("📤 Preparing and uploading your image..."):
-                img = Image.open(uploaded_file)
-                img = img.convert("RGB")
-                max_size = 1920
-                if img.width > max_size or img.height > max_size:
-                    img.thumbnail((max_size, max_size))
+            with st.spinner("📤 Uploading photo..."):
+                source_url = upload_to_fal(edit_file)
 
-                temp_path = "temp_upload.jpg"
-                img.save(temp_path, "JPEG", quality=95)
-                uploaded_url = fal_client.upload_file(temp_path)
-                os.remove(temp_path)
-
-            with st.spinner("🎥 Creating video (this takes 1-3 minutes)..."):
-                video_handler = fal_client.submit(
-                    "fal-ai/luma-dream-machine/ray-2/image-to-video",
+            with st.spinner("✨ Editing photo..."):
+                edit_handler = fal_client.submit(
+                    "fal-ai/nano-banana-2/edit",
                     arguments={
-                        "image_url": uploaded_url,
-                        "prompt": motion_prompt,
-                        "duration": "9s"
+                        "prompt": edit_prompt,
+                        "image_urls": [source_url],
+                        "num_images": 1,
+                        "output_format": "jpeg",
+                        "resolution": "1K"
                     }
                 )
-                video_result = video_handler.get()
-                vid_url = video_result['video']['url']
-                st.session_state.uploaded_video_url = vid_url
+                edit_result = edit_handler.get()
+                st.session_state.edited_image_url = edit_result['images'][0]['url']
 
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Edit error: {e}")
 
-# Show resulting video + download
-if st.session_state.uploaded_video_url:
-    st.success("Your video is ready!")
-    col1, col2, col3 = st.columns([2, 1, 2])
-    with col2:
-        st.video(st.session_state.uploaded_video_url)
-
+if st.session_state.edited_image_url:
+    st.success("Edit complete!")
+    st.image(st.session_state.edited_image_url, caption="Edited photo", width=500)
     try:
-        video_bytes = requests.get(st.session_state.uploaded_video_url).content
+        img_bytes = requests.get(st.session_state.edited_image_url).content
         st.download_button(
-            label="⬇️ Download Video",
-            data=video_bytes,
-            file_name="nas_ai_video.mp4",
-            mime="video/mp4",
-            key="download_vid_btn"
-        )
-    except Exception as e:
-        st.warning(f"Could not prepare download: {e}")
-
-st.write("---")
-st.caption("Ask Nas Anything can make mistakes. Please double-check responses.")
+            label="⬇️ Download Edited Photo",
+            data=img_bytes,
+            file_name="edited_photo.jpg",
