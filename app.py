@@ -1,6 +1,7 @@
 import streamlit as st
 import openai
 import os
+import re
 import fal_client
 import requests
 from PIL import Image
@@ -11,6 +12,12 @@ st.caption("Chat • Generate images • Turn images into video")
 
 groq_key = st.secrets["groq_key"]
 fal_key = st.secrets["fal_key"]
+
+def clean_response(text):
+    """Strip model reasoning tags so only the final answer is shown."""
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<think>.*", "", text, flags=re.DOTALL | re.IGNORECASE)
+    return text.strip()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -67,7 +74,7 @@ if prompt := st.chat_input("Ask me anything, or type /image followed by a descri
                     model="qwen/qwen3.6-27b",
                     messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages if m["type"] == "text"]
                 )
-                answer = response.choices[0].message.content
+                answer = clean_response(response.choices[0].message.content)
                 with st.chat_message("assistant"):
                     st.markdown(answer)
                 st.session_state.messages.append({"role": "assistant", "type": "text", "content": answer})
@@ -78,6 +85,13 @@ if prompt := st.chat_input("Ask me anything, or type /image followed by a descri
 if st.session_state.last_generated_image:
     st.write("---")
     st.subheader("🎬 Animate Last Generated Image")
+
+    gen_motion_prompt = st.text_input(
+        "Describe the motion you want",
+        value="cinematic camera movement, slow motion",
+        key="gen_motion_prompt"
+    )
+
     if st.button("Turn Last Generated Image into Video", key="video_gen_btn"):
         os.environ["FAL_KEY"] = fal_key
         with st.spinner("🎥 Creating video (this takes 1-3 minutes)..."):
@@ -86,7 +100,7 @@ if st.session_state.last_generated_image:
                     "fal-ai/luma-dream-machine/ray-2/image-to-video",
                     arguments={
                         "image_url": st.session_state.last_generated_image,
-                        "prompt": "cinematic camera movement, slow motion",
+                        "prompt": gen_motion_prompt,
                         "duration": "9s"
                     }
                 )
