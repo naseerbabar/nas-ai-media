@@ -165,3 +165,153 @@ if edit_file is not None:
                     "fal-ai/nano-banana-2/edit",
                     arguments={
                         "prompt": edit_prompt,
+                        "image_urls": [source_url],
+                        "num_images": 1,
+                        "output_format": "jpeg",
+                        "resolution": "1K"
+                    }
+                )
+                edit_result = edit_handler.get()
+                st.session_state.edited_image_url = edit_result['images'][0]['url']
+
+        except Exception as e:
+            st.error(f"Edit error: {e}")
+
+if st.session_state.edited_image_url:
+    st.success("Edit complete!")
+    st.image(st.session_state.edited_image_url, caption="Edited photo", width=500)
+    try:
+        img_bytes = requests.get(st.session_state.edited_image_url).content
+        st.download_button(
+            label="⬇️ Download Edited Photo",
+            data=img_bytes,
+            file_name="edited_photo.jpg",
+            mime="image/jpeg",
+            key="download_edit_btn"
+        )
+    except Exception as e:
+        st.warning(f"Could not prepare download: {e}")
+
+# ---------------------------------------------------------------
+# UPLOAD YOUR OWN IMAGE -> VIDEO
+# ---------------------------------------------------------------
+st.write("---")
+st.subheader("📤 Upload Your Own Photo and Make a Video")
+
+uploaded_file = st.file_uploader(
+    "Choose an image (JPG or PNG)",
+    type=["jpg", "jpeg", "png"],
+    key="img_uploader"
+)
+
+if uploaded_file is not None:
+    st.image(uploaded_file, caption="Your uploaded image", width=400)
+
+    motion_prompt = st.text_input(
+        "Describe the motion you want",
+        value="cinematic camera movement, slow motion",
+        key="motion_prompt"
+    )
+
+    if st.button("Animate My Uploaded Image", key="upload_video_btn"):
+        os.environ["FAL_KEY"] = fal_key
+        try:
+            with st.spinner("📤 Preparing and uploading your image..."):
+                uploaded_url = upload_to_fal(uploaded_file)
+
+            with st.spinner("🎥 Creating video (this takes 1-3 minutes)..."):
+                video_handler = fal_client.submit(
+                    "fal-ai/luma-dream-machine/ray-2/image-to-video",
+                    arguments={
+                        "image_url": uploaded_url,
+                        "prompt": motion_prompt,
+                        "duration": "9s"
+                    }
+                )
+                video_result = video_handler.get()
+                vid_url = video_result['video']['url']
+                st.session_state.uploaded_video_url = vid_url
+
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+if st.session_state.uploaded_video_url:
+    st.success("Your video is ready!")
+    col1, col2, col3 = st.columns([2, 1, 2])
+    with col2:
+        st.video(st.session_state.uploaded_video_url)
+
+    try:
+        video_bytes = requests.get(st.session_state.uploaded_video_url).content
+        st.download_button(
+            label="⬇️ Download Video",
+            data=video_bytes,
+            file_name="nas_ai_video.mp4",
+            mime="video/mp4",
+            key="download_vid_btn"
+        )
+    except Exception as e:
+        st.warning(f"Could not prepare download: {e}")
+
+# ---------------------------------------------------------------
+# TEXT TO VIDEO (with audio)
+# ---------------------------------------------------------------
+st.write("---")
+st.subheader("🎬 Create a Video from Text")
+st.caption("Describe a scene. The model generates video with synchronized audio, including speech.")
+
+t2v_prompt = st.text_area(
+    "Describe your video",
+    value="A man in a coffee shop looks at the camera and says, 'Are you talking to me?'",
+    key="t2v_prompt",
+    height=100
+)
+
+col_a, col_b, col_c = st.columns(3)
+with col_a:
+    t2v_resolution = st.selectbox("Resolution", ["480p", "720p", "1080p"], index=1, key="t2v_res")
+with col_b:
+    t2v_duration = st.selectbox("Duration (seconds)", ["auto", "4", "5", "6", "8", "10"], index=0, key="t2v_dur")
+with col_c:
+    t2v_aspect = st.selectbox("Aspect ratio", ["auto", "16:9", "9:16", "1:1"], index=0, key="t2v_aspect")
+
+t2v_audio = st.checkbox("Generate audio (speech, effects, ambience)", value=True, key="t2v_audio")
+
+if st.button("Generate Video", key="t2v_btn"):
+    os.environ["FAL_KEY"] = fal_key
+    with st.spinner("🎬 Creating your video (this can take several minutes)..."):
+        try:
+            t2v_handler = fal_client.submit(
+                "bytedance/seedance-2.0/text-to-video",
+                arguments={
+                    "prompt": t2v_prompt,
+                    "resolution": t2v_resolution,
+                    "duration": t2v_duration,
+                    "aspect_ratio": t2v_aspect,
+                    "generate_audio": t2v_audio
+                }
+            )
+            t2v_result = t2v_handler.get()
+            st.session_state.t2v_video_url = t2v_result['video']['url']
+        except Exception as e:
+            st.error(f"Text-to-video error: {e}")
+
+if st.session_state.t2v_video_url:
+    st.success("Your video is ready!")
+    col1, col2, col3 = st.columns([1, 3, 1])
+    with col2:
+        st.video(st.session_state.t2v_video_url)
+    try:
+        vid_bytes = requests.get(st.session_state.t2v_video_url).content
+        st.download_button(
+            label="⬇️ Download Video",
+            data=vid_bytes,
+            file_name="text_to_video.mp4",
+            mime="video/mp4",
+            key="download_t2v_btn"
+        )
+    except Exception as e:
+        st.warning(f"Could not prepare download: {e}")
+
+st.write("---")
+st.caption("Ask Nas Anything can make mistakes. Please double-check responses.")
