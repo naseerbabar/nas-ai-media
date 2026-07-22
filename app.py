@@ -41,7 +41,7 @@ if st.sidebar.button("🗑️ Clear Everything"):
         st.session_state[key] = [] if key == "messages" else None
     st.rerun()
 
-st.sidebar.info("**Tips**\n\n• Type `/image ...` in chat\n\n• Advanced Mode for maximum freedom\n\n• Video can be up to ~12 seconds")
+st.sidebar.info("**Tips**\n\n• Type `/image ...` in chat\n\n• Advanced Mode for maximum freedom\n\n• Text-to-Video can still take a few minutes")
 
 tab_chat, tab_media = st.tabs(["💬 Chat", "🎨 Media"])
 
@@ -53,7 +53,7 @@ def soften_prompt(p: str) -> str:
         lower = lower.replace(old, new)
     return lower if lower != p.lower() else p
 
-# Chat Tab
+# Chat Tab (Image-to-Video)
 with tab_chat:
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
@@ -93,8 +93,9 @@ with tab_chat:
                 except Exception as e:
                     st.error(f"Video error: {str(e)[:250]}")
 
-# Media Tab (Upload + Animate)
+# Media Tab
 with tab_media:
+    # Edit Photo
     st.subheader("✨ Edit a Photo")
     edit_file = st.file_uploader("Choose a photo to edit", type=["jpg", "jpeg", "png"], key="edit_uploader")
     if edit_file:
@@ -132,11 +133,7 @@ with tab_media:
                 num_frames = int(duration_sec * 16)
                 if advanced_mode:
                     handler = fal_client.submit("fal-ai/wan/v2.2-a14b/image-to-video", arguments={
-                        "image_url": url,
-                        "prompt": motion,
-                        "resolution": "720p",
-                        "num_frames": num_frames,
-                        "enable_safety_checker": False
+                        "image_url": url, "prompt": motion, "resolution": "720p", "num_frames": num_frames, "enable_safety_checker": False
                     })
                 else:
                     handler = fal_client.submit("fal-ai/luma-dream-machine/ray-2/image-to-video", arguments={"image_url": url, "prompt": motion, "duration": f"{duration_sec}s"})
@@ -161,11 +158,15 @@ with tab_media:
 
     if st.button("Generate Video"):
         os.environ["FAL_KEY"] = fal_key
-        with st.spinner("Creating video..."):
+        with st.spinner("Creating video (this can take 2-6 minutes)..."):
             try:
                 if advanced_mode:
-                    handler = fal_client.submit("fal-ai/hunyuan-video", arguments={
-                        "prompt": t2v_prompt, "resolution": res, "aspect_ratio": asp, "enable_safety_checker": False
+                    # Faster Wan T2V for Advanced Mode
+                    handler = fal_client.submit("fal-ai/wan/v2.2-a14b/text-to-video", arguments={
+                        "prompt": t2v_prompt,
+                        "resolution": res,
+                        "aspect_ratio": asp,
+                        "enable_safety_checker": False
                     })
                 else:
                     handler = fal_client.submit("bytedance/seedance-2.0/text-to-video", arguments={
@@ -174,7 +175,7 @@ with tab_media:
                 result = handler.get()
                 st.session_state.t2v_video_url = result['video']['url']
             except Exception as e:
-                st.error(f"Error: {str(e)[:200]}")
+                st.error(f"Text-to-video error: {str(e)[:250]}")
 
     if st.session_state.t2v_video_url:
         st.video(st.session_state.t2v_video_url)
