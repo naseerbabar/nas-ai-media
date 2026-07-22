@@ -29,40 +29,24 @@ def upload_to_fal(uploaded_file, max_size=1920):
     return url
 
 # Session State
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "last_generated_image" not in st.session_state:
-    st.session_state.last_generated_image = None
-if "last_image_prompt" not in st.session_state:
-    st.session_state.last_image_prompt = ""
-if "uploaded_video_url" not in st.session_state:
-    st.session_state.uploaded_video_url = None
-if "edited_image_url" not in st.session_state:
-    st.session_state.edited_image_url = None
-if "t2v_video_url" not in st.session_state:
-    st.session_state.t2v_video_url = None
+for k in ["messages", "last_generated_image", "last_image_prompt", "uploaded_video_url", "edited_image_url", "t2v_video_url"]:
+    if k not in st.session_state:
+        st.session_state[k] = [] if k == "messages" else None
 
 # Sidebar
 st.sidebar.markdown("### Options")
-advanced_mode = st.sidebar.checkbox("Advanced Mode (Higher Freedom)", value=True, help="Uses open models with fewer restrictions")
-
+advanced_mode = st.sidebar.checkbox("Advanced Mode (Higher Freedom)", value=True)
 if st.sidebar.button("🗑️ Clear Everything"):
     for key in list(st.session_state.keys()):
         st.session_state[key] = [] if key == "messages" else None
     st.rerun()
 
-st.sidebar.info(
-    "**Tips**\n\n"
-    "• Type `/image ...` in chat to generate an image\n\n"
-    "• Advanced Mode for maximum creative freedom\n\n"
-    "• Video generation can take 1-4 minutes"
-)
+st.sidebar.info("**Tips**\n\n• Type `/image ...` in chat\n\n• Advanced Mode for maximum freedom\n\n• Video can be up to ~12 seconds")
 
 tab_chat, tab_media = st.tabs(["💬 Chat", "🎨 Media"])
 
 def soften_prompt(p: str) -> str:
-    if not advanced_mode:
-        return p
+    if not advanced_mode: return p
     lower = p.lower()
     rep = {"bosom":"curve", "breast":"chest", "massaging":"caressing", "fucking":"intimate", "sex":"passionate", "pussy":"body", "cock":"form"}
     for old, new in rep.items():
@@ -73,43 +57,43 @@ def soften_prompt(p: str) -> str:
 with tab_chat:
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
-            if msg["type"] == "text":
-                st.markdown(msg["content"])
-            elif msg["type"] == "image":
-                st.image(msg["content"])
-            elif msg["type"] == "video":
-                st.video(msg["content"])
+            if msg["type"] == "text": st.markdown(msg["content"])
+            elif msg["type"] == "image": st.image(msg["content"])
+            elif msg["type"] == "video": st.video(msg["content"])
 
     if st.session_state.last_generated_image:
         st.write("---")
         st.subheader("🎬 Animate Last Generated Image")
-        gen_motion = st.text_input("Describe the motion you want", value="natural sensual movement, romantic intimate scene", key="gen_motion")
+        gen_motion = st.text_input("Describe the motion", value="natural sensual movement, romantic intimate scene", key="gen_motion")
+        duration_sec = st.slider("Video Duration (seconds)", 5, 12, 8)
         if st.button("Turn Last Generated Image into Video"):
             os.environ["FAL_KEY"] = fal_key
             with st.spinner("Creating video..."):
                 try:
                     motion = soften_prompt(gen_motion)
+                    num_frames = int(duration_sec * 16)
                     if advanced_mode:
                         handler = fal_client.submit("fal-ai/wan/v2.2-a14b/image-to-video", arguments={
                             "image_url": st.session_state.last_generated_image,
                             "prompt": motion,
                             "resolution": "720p",
+                            "num_frames": num_frames,
                             "enable_safety_checker": False
                         })
                     else:
                         handler = fal_client.submit("fal-ai/luma-dream-machine/ray-2/image-to-video", arguments={
                             "image_url": st.session_state.last_generated_image,
                             "prompt": motion,
-                            "duration": "9s"
+                            "duration": f"{duration_sec}s"
                         })
                     result = handler.get()
                     st.session_state.messages.append({"role": "assistant", "type": "video", "content": result['video']['url']})
                     st.session_state.last_generated_image = None
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Video error: {str(e)[:200]}")
+                    st.error(f"Video error: {str(e)[:250]}")
 
-# Media Tab
+# Media Tab (Upload + Animate)
 with tab_media:
     st.subheader("✨ Edit a Photo")
     edit_file = st.file_uploader("Choose a photo to edit", type=["jpg", "jpeg", "png"], key="edit_uploader")
@@ -121,8 +105,7 @@ with tab_media:
             try:
                 source_url = upload_to_fal(edit_file)
                 args = {"prompt": edit_prompt, "image_urls": [source_url], "num_images": 1, "output_format": "jpeg", "resolution": "1K"}
-                if advanced_mode:
-                    args["enable_safety_checker"] = False
+                if advanced_mode: args["enable_safety_checker"] = False
                 result = fal_client.submit("fal-ai/nano-banana-2/edit", arguments=args).get()
                 st.session_state.edited_image_url = result['images'][0]['url']
             except Exception as e:
@@ -140,20 +123,23 @@ with tab_media:
     if uploaded_file:
         st.image(uploaded_file, width=400)
         motion_prompt = st.text_input("Describe the motion you want", value="natural sensual movement, romantic intimate scene", key="motion_prompt")
+        duration_sec = st.slider("Video Duration (seconds)", 5, 12, 8, key="upload_dur")
         if st.button("Animate My Uploaded Image"):
             os.environ["FAL_KEY"] = fal_key
             try:
                 url = upload_to_fal(uploaded_file)
                 motion = soften_prompt(motion_prompt)
+                num_frames = int(duration_sec * 16)
                 if advanced_mode:
                     handler = fal_client.submit("fal-ai/wan/v2.2-a14b/image-to-video", arguments={
                         "image_url": url,
                         "prompt": motion,
                         "resolution": "720p",
+                        "num_frames": num_frames,
                         "enable_safety_checker": False
                     })
                 else:
-                    handler = fal_client.submit("fal-ai/luma-dream-machine/ray-2/image-to-video", arguments={"image_url": url, "prompt": motion, "duration": "9s"})
+                    handler = fal_client.submit("fal-ai/luma-dream-machine/ray-2/image-to-video", arguments={"image_url": url, "prompt": motion, "duration": f"{duration_sec}s"})
                 result = handler.get()
                 st.session_state.uploaded_video_url = result['video']['url']
             except Exception as e:
@@ -200,14 +186,12 @@ with tab_media:
 if prompt := st.chat_input("Ask me anything, or type /image followed by a description..."):
     st.session_state.messages.append({"role": "user", "type": "text", "content": prompt})
     os.environ["FAL_KEY"] = fal_key
-
     if prompt.lower().startswith("/image "):
         image_prompt = prompt[7:]
         with st.spinner("Generating image..."):
             try:
                 args = {"prompt": image_prompt, "num_images": 1}
-                if advanced_mode:
-                    args["enable_safety_checker"] = False
+                if advanced_mode: args["enable_safety_checker"] = False
                 result = fal_client.submit("fal-ai/flux/schnell", arguments=args).get()
                 url = result['images'][0]['url']
                 st.session_state.last_generated_image = url
