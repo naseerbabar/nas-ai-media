@@ -41,7 +41,7 @@ if st.sidebar.button("🗑️ Clear Everything"):
         st.session_state[key] = [] if key == "messages" else None
     st.rerun()
 
-st.sidebar.info("**Tips**\n\n• Type `/image ...` in chat\n\n• Advanced Mode for maximum freedom")
+st.sidebar.info("**Tips**\n\n• Type `/image ...` in chat\n\n• Advanced Mode for maximum freedom\n\n• Max ~10 seconds for Text-to-Video")
 
 tab_chat, tab_media = st.tabs(["💬 Chat", "🎨 Media"])
 
@@ -53,7 +53,7 @@ def soften_prompt(p: str) -> str:
         lower = lower.replace(old, new)
     return lower if lower != p.lower() else p
 
-# Chat Tab (Image to Video) - unchanged
+# Chat Tab - Image to Video
 with tab_chat:
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
@@ -71,7 +71,7 @@ with tab_chat:
             with st.spinner("Creating video..."):
                 try:
                     motion = soften_prompt(gen_motion)
-                    num_frames = int(duration_sec * 16)
+                    num_frames = min(int(duration_sec * 16), 161)
                     if advanced_mode:
                         handler = fal_client.submit("fal-ai/wan/v2.2-a14b/image-to-video", arguments={
                             "image_url": st.session_state.last_generated_image,
@@ -93,7 +93,7 @@ with tab_chat:
                 except Exception as e:
                     st.error(f"Video error: {str(e)[:250]}")
 
-# Media Tab
+# Media Tab (Upload Image to Video)
 with tab_media:
     st.subheader("✨ Edit a Photo")
     edit_file = st.file_uploader("Choose a photo to edit", type=["jpg", "jpeg", "png"], key="edit_uploader")
@@ -129,7 +129,7 @@ with tab_media:
             try:
                 url = upload_to_fal(uploaded_file)
                 motion = soften_prompt(motion_prompt)
-                num_frames = int(duration_sec * 16)
+                num_frames = min(int(duration_sec * 16), 161)
                 if advanced_mode:
                     handler = fal_client.submit("fal-ai/wan/v2.2-a14b/image-to-video", arguments={
                         "image_url": url, "prompt": motion, "resolution": "720p", "num_frames": num_frames, "enable_safety_checker": False
@@ -152,20 +152,20 @@ with tab_media:
     t2v_prompt = st.text_area("Describe your video", value="A beautiful woman with natural curves in a sensual romantic scene", key="t2v_prompt", height=100)
     col_a, col_b, col_c = st.columns(3)
     with col_a: res = st.selectbox("Resolution", ["480p", "720p"], index=1)
-    with col_b: dur = st.selectbox("Duration", ["5s", "8s", "10s", "12s", "15s"], index=4)
+    with col_b: dur = st.selectbox("Duration", ["5s", "8s", "10s"], index=2)   # capped at 10s for stability
     with col_c: asp = st.selectbox("Aspect ratio", ["16:9", "9:16", "1:1"], index=0)
 
     if st.button("Generate Video"):
         os.environ["FAL_KEY"] = fal_key
-        with st.spinner("Creating video (this can take several minutes for longer clips)..."):
+        with st.spinner("Creating video (this can take several minutes)..."):
             try:
                 if advanced_mode:
-                    # Use parameters that better support longer duration
+                    num_frames = min(int(int(dur.replace("s","")) * 16), 161)
                     handler = fal_client.submit("fal-ai/wan/v2.2-a14b/text-to-video", arguments={
                         "prompt": t2v_prompt,
                         "resolution": res,
                         "aspect_ratio": asp,
-                        "num_frames": int(int(dur.replace("s","")) * 16),
+                        "num_frames": num_frames,
                         "enable_safety_checker": False
                     })
                 else:
