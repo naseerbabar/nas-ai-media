@@ -41,7 +41,7 @@ if st.sidebar.button("🗑️ Clear Everything"):
         st.session_state[key] = [] if key == "messages" else None
     st.rerun()
 
-st.sidebar.info("**Tips**\n\n• Type `/image ...` in chat\n\n• Advanced Mode for maximum freedom\n\n• Text-to-Video up to 15 seconds")
+st.sidebar.info("**Tips**\n\n• Type `/image ...` in chat\n\n• Advanced Mode for maximum freedom")
 
 tab_chat, tab_media = st.tabs(["💬 Chat", "🎨 Media"])
 
@@ -53,7 +53,7 @@ def soften_prompt(p: str) -> str:
         lower = lower.replace(old, new)
     return lower if lower != p.lower() else p
 
-# Chat Tab - Image to Video
+# Chat Tab (Image to Video) - unchanged
 with tab_chat:
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
@@ -157,13 +157,15 @@ with tab_media:
 
     if st.button("Generate Video"):
         os.environ["FAL_KEY"] = fal_key
-        with st.spinner("Creating video (can take several minutes for longer clips)..."):
+        with st.spinner("Creating video (this can take several minutes for longer clips)..."):
             try:
                 if advanced_mode:
+                    # Use parameters that better support longer duration
                     handler = fal_client.submit("fal-ai/wan/v2.2-a14b/text-to-video", arguments={
                         "prompt": t2v_prompt,
                         "resolution": res,
                         "aspect_ratio": asp,
+                        "num_frames": int(int(dur.replace("s","")) * 16),
                         "enable_safety_checker": False
                     })
                 else:
