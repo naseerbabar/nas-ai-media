@@ -29,16 +29,30 @@ def upload_to_fal(uploaded_file, max_size=1920):
     return url
 
 # Session State
-for k in ["messages", "last_generated_image", "last_image_prompt", "uploaded_video_url", "edited_image_url", "t2v_video_url"]:
-    if k not in st.session_state:
-        st.session_state[k] = [] if k == "messages" else None
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "last_generated_image" not in st.session_state:
+    st.session_state.last_generated_image = None
+if "last_image_prompt" not in st.session_state:
+    st.session_state.last_image_prompt = ""
+if "uploaded_video_url" not in st.session_state:
+    st.session_state.uploaded_video_url = None
+if "edited_image_url" not in st.session_state:
+    st.session_state.edited_image_url = None
+if "t2v_video_url" not in st.session_state:
+    st.session_state.t2v_video_url = None
 
 # Sidebar
 st.sidebar.markdown("### Options")
 advanced_mode = st.sidebar.checkbox("Advanced Mode (Higher Freedom)", value=True)
+
 if st.sidebar.button("🗑️ Clear Everything"):
-    for key in list(st.session_state.keys()):
-        st.session_state[key] = [] if key == "messages" else None
+    st.session_state.messages = []
+    st.session_state.last_generated_image = None
+    st.session_state.last_image_prompt = ""
+    st.session_state.uploaded_video_url = None
+    st.session_state.edited_image_url = None
+    st.session_state.t2v_video_url = None
     st.rerun()
 
 st.sidebar.info("**Tips**\n\n• Type `/image ...` in chat\n\n• Advanced Mode for maximum freedom")
